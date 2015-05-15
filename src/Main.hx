@@ -146,9 +146,6 @@ class Main {
 		var printer = new haxe.macro.Printer();
 		var header = "// generated from ts2hx
 import js.html.*;
-typedef HTMLCanvasElement = js.html.CanvasElement;
-typedef HTMLImageElement = js.html.ImageElement;
-typedef HTMLElement = js.html.Element;
 typedef WebGLRenderingContext = js.html.webgl.RenderingContext;
 
 ";

@@ -9,21 +9,50 @@ typedef HaxeModule = {
 	toplevel: Array<Field>
 }
 
+typedef HaxeClass = {
+	fields: Array<Field>,
+	parent: String
+};
+
 class Converter {
 
 	static var nullPos = { min:0, max:0, file:"" };
 	static var tDynamic = TPath({ pack: [], name: "Dynamic", sub: null, params: [] });
 	static var tInt = { pack: [], name: "Int", sub: null, params: [] };
 
+	var classes:Map<String, HaxeClass>;
 	public var modules(default, null):Map<String, HaxeModule>;
 	var currentModule:HaxeModule;
 
 	public function new() {
 		modules = new Map();
+		classes = new Map();
 	}
 
 	public function convert(module:TsModule) {
 		convertDecl(DModule(module));
+		for (className in classes.keys())
+		{
+			var c = classes.get(className);
+			if (c.parent != null) {
+				for (type in currentModule.types)
+				{
+					if (type.name == className)
+					{
+						var parentFields = getClassFields(c.parent);
+						type.fields =  c.fields.filter(function(field:Field) {
+							if (field.name == "new") return true;
+							if (parentFields.indexOf(field.name) != -1)
+							{
+								return false;
+							}
+							return true;
+						});
+						break;
+					}
+				}
+			}
+		}
 	}
 
 	function convertDecl(d:TsDeclaration) {
@@ -100,7 +129,7 @@ class Converter {
 		if (currentModule.toplevel.length > 0) {
 			currentModule.types.push({
 				pack: [],
-				name: className(name.replace("/", "_")) + "TopLevel",
+				name: convertClassName(name.replace("/", "_")),
 				pos: nullPos,
 				isExtern: true,
 				kind: TDClass(),
@@ -115,7 +144,7 @@ class Converter {
 		var kind = parents.length == 0 ? TAnonymous(fields) : TExtend(parents, fields);
 		var td = {
 			pack: [],
-			name: className(i.name),
+			name: convertClassName(i.name),
 			pos: nullPos,
 			meta: [],
 			params: i.params.map(convertTypeParameter),
@@ -126,28 +155,39 @@ class Converter {
 		return td;
 	}
 
+	function getClassFields(c:String):Array<String> {
+		if (!classes.exists(c)) return [];
+		var cl = classes.get(c);
+		var fields = [for (f in cl.fields) f.name];
+		return (cl.parent == null ? fields : fields.concat(getClassFields(cl.parent)));
+	}
+
 	function convertClass(c:TsClass) {
 		var fields = convertFields(c.t);
 		var interfaces = c.interfaces.map(convertTypeReference);
 		// TODO: can't implement typedefs, I guess we can rely on structural subtyping
 		interfaces = [];
 		var meta = [];
-		var name = className(c.name);
+		var name = convertClassName(c.name);
 		if (name != c.name)
 		{
 			meta.push(nativeMeta(c.name));
 		}
-		var td = {
+		var parentClass = null;
+		if (c.parentClass != null) {
+			parentClass = convertTypeReference(c.parentClass);
+		}
+		classes.set(name, { fields: fields, parent: parentClass == null ? null : parentClass.name });
+		return {
 			pack: [],
 			name: name,
 			pos: nullPos,
 			meta: meta,
 			params: c.params.map(convertTypeParameter),
 			isExtern: true,
-			kind: TDClass(c.parentClass == null ? null : convertTypeReference(c.parentClass), interfaces),
+			kind: TDClass(parentClass, interfaces),
 			fields: fields
-		}
-		return td;
+		};
 	}
 
 	function convertEnum(en:TsEnum) {
@@ -167,7 +207,7 @@ class Converter {
 			}
 		});
 		var meta = [];
-		var name = className(en.name);
+		var name = convertClassName(en.name);
 		if (name != en.name)
 		{
 			meta.push(nativeMeta(en.name));
@@ -287,6 +327,11 @@ class Converter {
 			params: tref.params.map(function(t) return TPType(convertType(t))),
 			sub: null
 		};
+		// convert types starting with HTML to the js.html package
+		var html = ~/^HTML([a-zA-Z]*)$/;
+		if (html.match(tPath.name)) {
+			tPath.name = "js.html." + html.matched(1);
+		}
 		switch [tPath.name, tPath.pack] {
 			case ["Object", []]:
 				tPath.name = "Dynamic";
@@ -325,7 +370,7 @@ class Converter {
 		return { name: ":native", params: [{ expr: EConst(CString(name)), pos: nullPos }], pos: nullPos };
 	}
 
-	static public function className(s:String) {
+	static public function convertClassName(s:String) {
 		if (topLevelClass.match(s))
 		{
 			s += "_";
