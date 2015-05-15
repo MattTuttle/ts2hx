@@ -5,6 +5,7 @@ import haxe.macro.Expr;
 using StringTools;
 
 typedef HaxeModule = {
+	name: String,
 	types: Array<TypeDefinition>,
 	toplevel: Array<Field>
 }
@@ -31,9 +32,13 @@ class Converter {
 
 	public function convert(module:TsModule) {
 		convertDecl(DModule(module));
+
+		// prevent redefinition of members in subclasses
+		// must be done after all classes are converted to resolve forward declarations
 		for (className in classes.keys())
 		{
 			var c = classes.get(className);
+			// only do work if the class has a parent
 			if (c.parent != null) {
 				for (type in currentModule.types)
 				{
@@ -117,6 +122,7 @@ class Converter {
 		var name = pathToString(m.path);
 		if (!modules.exists(name)) {
 			modules.set(name, {
+				name: name,
 				types: [],
 				toplevel: []
 			});
@@ -129,8 +135,9 @@ class Converter {
 		if (currentModule.toplevel.length > 0) {
 			currentModule.types.push({
 				pack: [],
-				name: convertClassName(name.replace("/", "_")),
+				name: capitalize(name.replace("/", "_")),
 				pos: nullPos,
+				meta: [nativeMeta(name)],
 				isExtern: true,
 				kind: TDClass(),
 				fields: currentModule.toplevel
@@ -142,11 +149,18 @@ class Converter {
 		var fields = convertFields(i.t);
 		var parents = i.parents.map(convertTypeReference);
 		var kind = parents.length == 0 ? TAnonymous(fields) : TExtend(parents, fields);
+		var meta = [];
+		var name = convertClassName(i.name);
+		var path = currentModule.name + "." + i.name;
+		if (name != path)
+		{
+			meta.push(nativeMeta(path));
+		}
 		var td = {
 			pack: [],
-			name: convertClassName(i.name),
+			name: name,
 			pos: nullPos,
-			meta: [],
+			meta: meta,
 			params: i.params.map(convertTypeParameter),
 			isExtern: false,
 			kind: TDAlias(kind),
@@ -169,9 +183,10 @@ class Converter {
 		interfaces = [];
 		var meta = [];
 		var name = convertClassName(c.name);
-		if (name != c.name)
+		var path = currentModule.name + "." + c.name;
+		if (name != path)
 		{
-			meta.push(nativeMeta(c.name));
+			meta.push(nativeMeta(path));
 		}
 		var parentClass = null;
 		if (c.parentClass != null) {
@@ -206,17 +221,18 @@ class Converter {
 				pos: nullPos
 			}
 		});
-		var meta = [];
+		var meta = [{name: ":enum", params: [], pos: nullPos}];
 		var name = convertClassName(en.name);
-		if (name != en.name)
+		var path = currentModule.name + "." + en.name;
+		if (name != path)
 		{
-			meta.push(nativeMeta(en.name));
+			meta.push(nativeMeta(path));
 		}
 		var td = {
 			pack: [],
 			name: name,
 			pos: nullPos,
-			meta: [{name: ":enum", params: [], pos: nullPos}],
+			meta: meta,
 			params: [],
 			isExtern: false,
 			kind: TDAbstract(TPath(tInt)),
@@ -370,12 +386,8 @@ class Converter {
 		return { name: ":native", params: [{ expr: EConst(CString(name)), pos: nullPos }], pos: nullPos };
 	}
 
-	static public function convertClassName(s:String) {
-		if (topLevelClass.match(s))
-		{
-			s += "_";
-		}
-		return capitalize(s);
+	public function convertClassName(s:String) {
+		return capitalize(topLevelClass.match(s) ? s + "_" : s);
 	}
 
 	static public function capitalize(s:String) {
