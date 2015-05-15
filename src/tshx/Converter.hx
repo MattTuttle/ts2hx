@@ -38,6 +38,7 @@ class Converter {
 				currentModule.types.push(convertEnum(en));
 			case DTypedef(t):
 				// TODO
+				trace("Unsupported: " + t);
 			case DFunction(sig):
 				currentModule.toplevel.push({
 					name: sig.name,
@@ -86,24 +87,24 @@ class Converter {
 	function convertModule(m:TsModule) {
 		var name = pathToString(m.path);
 		if (!modules.exists(name)) {
-			modules[name] = {
+			modules.set(name, {
 				types: [],
 				toplevel: []
-			}
+			});
 		}
 		var old = currentModule;
-		currentModule = modules[name];
+		currentModule = modules.get(name);
 		for (decl in m.elements) {
 			convertDecl(decl);
 		}
-		if (modules[name].toplevel.length > 0) {
-			modules[name].types.push({
+		if (currentModule.toplevel.length > 0) {
+			currentModule.types.push({
 				pack: [],
-				name: capitalize(name.replace("/", "_")) + "TopLevel",
+				name: className(name.replace("/", "_")) + "TopLevel",
 				pos: nullPos,
 				isExtern: true,
 				kind: TDClass(),
-				fields: modules[name].toplevel
+				fields: currentModule.toplevel
 			});
 		}
 	}
@@ -114,7 +115,7 @@ class Converter {
 		var kind = parents.length == 0 ? TAnonymous(fields) : TExtend(parents, fields);
 		var td = {
 			pack: [],
-			name: capitalize(i.name),
+			name: className(i.name),
 			pos: nullPos,
 			meta: [],
 			params: i.params.map(convertTypeParameter),
@@ -130,11 +131,17 @@ class Converter {
 		var interfaces = c.interfaces.map(convertTypeReference);
 		// TODO: can't implement typedefs, I guess we can rely on structural subtyping
 		interfaces = [];
+		var meta = [];
+		var name = className(c.name);
+		if (name != c.name)
+		{
+			meta.push(nativeMeta(c.name));
+		}
 		var td = {
 			pack: [],
-			name: capitalize(c.name),
+			name: name,
 			pos: nullPos,
-			meta: [],
+			meta: meta,
 			params: c.params.map(convertTypeParameter),
 			isExtern: true,
 			kind: TDClass(c.parentClass == null ? null : convertTypeReference(c.parentClass), interfaces),
@@ -159,9 +166,15 @@ class Converter {
 				pos: nullPos
 			}
 		});
+		var meta = [];
+		var name = className(en.name);
+		if (name != en.name)
+		{
+			meta.push(nativeMeta(en.name));
+		}
 		var td = {
 			pack: [],
-			name: capitalize(en.name),
+			name: name,
 			pos: nullPos,
 			meta: [{name: ":enum", params: [], pos: nullPos}],
 			params: [],
@@ -189,14 +202,14 @@ class Converter {
 			case TCall(_) | TConstruct(_) | TIndex(_):
 				return null;
 		}
-		return {
-			name: convertPropertyName(o.name),
-			kind: o.kind,
-			doc: null,
-			meta: o.opt ? [{name: ":optional", params: [], pos: nullPos}] : [],
-			access: o.access,
-			pos: nullPos
-		}
+		var meta = [];
+		if (o.opt) meta.push({name: ":optional", params: [], pos: nullPos});
+		// check if converted property name matches the original, if not add @:native metadata
+		var name = convertPropertyName(o.name);
+		var original = originalPropertyName(o.name);
+		if (name != original) meta.push(nativeMeta(original));
+
+		return { name: name, kind: o.kind, doc: null, meta: meta, access: o.access, pos: nullPos };
 	}
 
 	function convertFunction(sig:TsCallSignature):Function
@@ -288,9 +301,17 @@ class Converter {
 		return tPath;
 	}
 
-	function convertPropertyName(pn:TsPropertyName) {
+	function originalPropertyName(pn:TsPropertyName) {
 		return switch(pn) {
 			case TIdentifier(s): s;
+			case TStringLiteral(s): s;
+			case TNumericLiteral(s): s;
+		}
+	}
+
+	function convertPropertyName(pn:TsPropertyName) {
+		return switch(pn) {
+			case TIdentifier(s): keywords.match(s) ? s + "_" : s;
 			case TStringLiteral(s): s;
 			case TNumericLiteral(s): "_" + s;
 		}
@@ -300,7 +321,22 @@ class Converter {
 		return p.join(".");
 	}
 
+	function nativeMeta(name:String) {
+		return { name: ":native", params: [{ expr: EConst(CString(name)), pos: nullPos }], pos: nullPos };
+	}
+
+	static public function className(s:String) {
+		if (topLevelClass.match(s))
+		{
+			s += "_";
+		}
+		return capitalize(s);
+	}
+
 	static public function capitalize(s:String) {
 		return s.charAt(0).toUpperCase() + s.substr(1);
 	}
+
+	static public var keywords = ~/^(break|callback|case|cast|catch|class|continue|default|do|dynamic|else|enum|extends|extern|false|for|function|if|implements|import|in|inline|interface|never|null|override|package|private|public|return|static|super|switch|this|throw|trace|true|try|typedef|untyped|using|var|while)$/;
+	static public var topLevelClass = ~/^(Array|ArrayAccess|Bool|Class|Date|DateTools|Dynamic|EReg|Enum|EnumValue|Float|IMap|Int|IntIterator|Iterable|Iterator|Lambda|List|Map|Math|Null|Reflect|Single|Std|String|StringBuf|StringTools|Sys|Type|UInt|ValueType|Void|Xml)$/;
 }

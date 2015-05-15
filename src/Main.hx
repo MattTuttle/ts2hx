@@ -52,13 +52,10 @@ class Main {
 		]);
 		var args = Sys.args();
 		handler.parse(args);
-		if (printHelp) {
+		if (printHelp || config.inPaths.length == 0) {
 			Sys.println("Usage: ts2hx [options] <input path>");
 			Sys.println(handler.getDoc());
 			Sys.exit(0);
-		}
-		if (config.inPaths.length == 0) {
-			config.inPaths = ["."];
 		}
 		if (config.inclusionFilters.length == 0) {
 			config.inclusionFilters.push(~/\.d\.ts$/);
@@ -147,16 +144,24 @@ class Main {
 		}
 		// Step 3: Use haxe.macro.Printer to print the Haxe declarations.
 		var printer = new haxe.macro.Printer();
+		var header = "// generated from ts2hx
+import js.html.*;
+typedef HTMLCanvasElement = js.html.CanvasElement;
+typedef HTMLImageElement = js.html.ImageElement;
+typedef HTMLElement = js.html.Element;
+typedef WebGLRenderingContext = js.html.webgl.RenderingContext;
+
+";
 		for (k in converter.modules.keys()) {
 			var outPath = outDir + "/" + tshx.Converter.capitalize(k.replace("/", "_")) + ".hx";
 			var buf = new StringBuf();
-			for (t in converter.modules[k].types) {
+			for (t in converter.modules.get(k).types) {
 				var s = printer.printTypeDefinition(t);
 				buf.add(s);
 				buf.add("\n");
 			}
 			if (buf.length > 0) {
-				sys.io.File.saveContent(outPath, buf.toString());
+				sys.io.File.saveContent(outPath, header + buf.toString());
 				Sys.println('Written $outPath');
 			}
 		}
