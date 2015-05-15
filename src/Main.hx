@@ -145,7 +145,6 @@ class Main {
 		// Step 3: Use haxe.macro.Printer to print the Haxe declarations.
 		var header = "// generated from ts2hx
 import js.html.*;
-typedef WebGLRenderingContext = js.html.webgl.RenderingContext;
 
 ";
 		var printer = new haxe.macro.Printer();

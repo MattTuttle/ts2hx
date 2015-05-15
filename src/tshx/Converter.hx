@@ -23,6 +23,7 @@ class Converter {
 
 	var classes:Map<String, HaxeClass>;
 	public var modules(default, null):Map<String, HaxeModule>;
+	var topModule:String;
 	var currentModule:HaxeModule;
 
 	public function new() {
@@ -31,33 +32,8 @@ class Converter {
 	}
 
 	public function convert(module:TsModule) {
+		topModule = module.path[0] = module.path[0] + "/TopLevel";
 		convertDecl(DModule(module));
-
-		// prevent redefinition of members in subclasses
-		// must be done after all classes are converted to resolve forward declarations
-		for (className in classes.keys())
-		{
-			var c = classes.get(className);
-			// only do work if the class has a parent
-			if (c.parent != null) {
-				for (type in currentModule.types)
-				{
-					if (type.name == className)
-					{
-						var parentFields = getClassFields(c.parent);
-						type.fields =  c.fields.filter(function(field:Field) {
-							if (field.name == "new") return true;
-							if (parentFields.indexOf(field.name) != -1)
-							{
-								return false;
-							}
-							return true;
-						});
-						break;
-					}
-				}
-			}
-		}
 	}
 
 	function convertDecl(d:TsDeclaration) {
@@ -137,12 +113,39 @@ class Converter {
 				pack: [],
 				name: capitalize(name.replace("/", "_")),
 				pos: nullPos,
-				meta: [nativeMeta(name)],
+				meta: currentModule.name == topModule ? [] : [nativeMeta(name)],
 				isExtern: true,
 				kind: TDClass(),
 				fields: currentModule.toplevel
 			});
 		}
+
+		// prevent redefinition of members in subclasses
+		// must be done after all classes are converted to resolve forward declarations
+		for (className in classes.keys())
+		{
+			var c = classes.get(className);
+			// only do work if the class has a parent
+			if (c.parent != null) {
+				for (type in currentModule.types)
+				{
+					if (type.name == className)
+					{
+						var parentFields = getClassFields(c.parent);
+						type.fields =  c.fields.filter(function(field:Field) {
+							if (field.name == "new") return true;
+							if (parentFields.indexOf(field.name) != -1)
+							{
+								return false;
+							}
+							return true;
+						});
+						break;
+					}
+				}
+			}
+		}
+		currentModule = old;
 	}
 
 	function convertInterface(i:TsInterface) {
@@ -151,7 +154,7 @@ class Converter {
 		var kind = parents.length == 0 ? TAnonymous(fields) : TExtend(parents, fields);
 		var meta = [];
 		var name = convertClassName(i.name);
-		var path = currentModule.name + "." + i.name;
+		var path = modulePath(i.name);
 		if (name != path)
 		{
 			meta.push(nativeMeta(path));
@@ -183,7 +186,7 @@ class Converter {
 		interfaces = [];
 		var meta = [];
 		var name = convertClassName(c.name);
-		var path = currentModule.name + "." + c.name;
+		var path = modulePath(c.name);
 		if (name != path)
 		{
 			meta.push(nativeMeta(path));
@@ -223,7 +226,7 @@ class Converter {
 		});
 		var meta = [{name: ":enum", params: [], pos: nullPos}];
 		var name = convertClassName(en.name);
-		var path = currentModule.name + "." + en.name;
+		var path = modulePath(en.name);
 		if (name != path)
 		{
 			meta.push(nativeMeta(path));
@@ -384,6 +387,10 @@ class Converter {
 
 	function nativeMeta(name:String) {
 		return { name: ":native", params: [{ expr: EConst(CString(name)), pos: nullPos }], pos: nullPos };
+	}
+
+	function modulePath(name:String) {
+		return currentModule.name == topModule ? name : currentModule.name + "." + name;
 	}
 
 	public function convertClassName(s:String) {
