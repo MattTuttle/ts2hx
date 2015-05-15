@@ -244,7 +244,7 @@ class Parser extends hxparse.Parser<hxparse.LexerTokenSource<TsToken>, TsToken> 
 	function type() {
 		return typeNext(switch stream {
 			case [{def: TIdent("any")}]: TPredefined(TAny);
-			case [{def: TIdent("number")}]: TPredefined(TNumber);
+			case [{def: TIdent("number" | "Number")}]: TPredefined(TNumber);
 			case [{def: TIdent("boolean" | "bool")}]: TPredefined(TBoolean);
 			case [{def: TIdent("string")}]: TPredefined(TString);
 			case [{def: TIdent("void")}]: TPredefined(TVoid);

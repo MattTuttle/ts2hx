@@ -18,7 +18,7 @@ class Test {
 					var old = Sys.getCwd();
 					var moduleName = file.substr(0, -3);
 					Sys.setCwd(dirPath);
-					var proc = new sys.io.Process("haxe", [moduleName]);
+					var proc = new sys.io.Process("haxe", ["-js", "test.js", moduleName]);
 					Sys.setCwd(old);
 					var exit = proc.exitCode();
 					if (exit != 0) {

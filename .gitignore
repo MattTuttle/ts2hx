@@ -1,2 +1,6 @@
 bin/
 out/
+
+# local testing
+libs/
+all.hxml

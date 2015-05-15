@@ -23,7 +23,7 @@ class Converter {
 
 	var classes:Map<String, HaxeClass>;
 	public var modules(default, null):Map<String, HaxeModule>;
-	var topModule:String;
+	public var topModule(default, null):String;
 	var currentModule:HaxeModule;
 
 	public function new() {
@@ -32,7 +32,7 @@ class Converter {
 	}
 
 	public function convert(module:TsModule) {
-		topModule = module.path[0] = module.path[0] + "/TopLevel";
+		topModule = module.path[0];
 		convertDecl(DModule(module));
 	}
 
@@ -152,6 +152,12 @@ class Converter {
 		var fields = convertFields(i.t);
 		var parents = i.parents.map(convertTypeReference);
 		var kind = parents.length == 0 ? TAnonymous(fields) : TExtend(parents, fields);
+		switch (i.t[0]) {
+			case TCall(c):
+				var args = [for (a in c.arguments) convertType(a.type)];
+				kind = TFunction(args, convertType(c.type));
+			default:
+		}
 		var meta = [];
 		var name = convertClassName(i.name);
 		var path = modulePath(i.name);

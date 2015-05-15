@@ -149,16 +149,18 @@ import js.html.*;
 ";
 		var printer = new haxe.macro.Printer();
 		for (k in converter.modules.keys()) {
-			var outPath = outDir + "/" + tshx.Converter.capitalize(k.replace("/", "_")) + ".hx";
+			var outPath = (converter.topModule == k ? outDir : outDir + "/" + tshx.Converter.capitalize(k));
+			if (!sys.FileSystem.exists(outPath)) {
+				sys.FileSystem.createDirectory(outPath);
+			}
 			var buf = new StringBuf();
 			for (t in converter.modules.get(k).types) {
+				var path = outPath + "/" + t.name + ".hx";
 				var s = printer.printTypeDefinition(t);
-				buf.add(s);
-				buf.add("\n");
-			}
-			if (buf.length > 0) {
-				sys.io.File.saveContent(outPath, header + buf.toString());
-				Sys.println('Written $outPath');
+				if (s.length > 0) {
+					sys.io.File.saveContent(path, header + s);
+					Sys.println('Written $path');
+				}
 			}
 		}
 	}
